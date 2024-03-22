@@ -11,6 +11,10 @@ pub const PAIRS: &[(char, char)] = &[
     ('«', '»'),
     ('「', '」'),
     ('（', '）'),
+    ('"', '"'),
+    ('\'', '\''),
+    ('´', '´'),
+    ('`', '`'),
 ];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -57,7 +61,11 @@ pub fn find_nth_closest_pairs_pos(
     range: Range,
     mut skip: usize,
 ) -> Result<(usize, usize)> {
-    let is_open_pair = |ch| PAIRS.iter().any(|(open, _)| *open == ch);
+    let is_open_pair = |ch| {
+        PAIRS
+            .iter()
+            .any(|(open, close)| *open == ch && open != close)
+    };
     let is_close_pair = |ch| PAIRS.iter().any(|(_, close)| *close == ch);
 
     let mut stack = Vec::with_capacity(2);
@@ -176,7 +184,7 @@ fn find_nth_open_pair(
     // Adjusts pos for the first iteration, and handles the case of the
     // cursor being *on* the close character which will get falsely stepped over
     // if not skipped here
-    if chars.prev()? == open {
+    if chars.prev()? == open && open != close {
         return Some(pos);
     }
 
@@ -188,7 +196,7 @@ fn find_nth_open_pair(
             pos = pos.saturating_sub(1);
 
             // ignore other surround pairs that are enclosed *within* our search scope
-            if c == close {
+            if c == close && open != close {
                 step_over += 1;
             } else if c == open {
                 if step_over == 0 {
