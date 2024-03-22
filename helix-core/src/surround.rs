@@ -144,28 +144,54 @@ pub fn find_nth_pairs_pos(
         return Err(Error::RangeExceedsText);
     }
 
-    let (open, close) = get_pair(ch);
-    let pos = range.cursor(text);
+    let (open_char, close_char) = get_pair(ch);
+    let current_pos = range.cursor(text);
 
-    let (open, close) = if open == close {
-        if Some(open) == text.get_char(pos) {
-            // Cursor is directly on match char. We return no match
-            // because there's no way to know which side of the char
-            // we should be searching on.
-            return Err(Error::CursorOnAmbiguousPair);
+    let (open_pos, close_pos) = if open_char == close_char {
+        if Some(open_char) == text.get_char(current_pos) {
+            let prev_pos_opt = search::find_nth_prev(text, open_char, current_pos, n);
+            let next_pos_opt = search::find_nth_next(text, close_char, current_pos + 1, n);
+
+            log::warn!(
+                "current_pos: '{}', prev_pos_opt: '{:?}', next_pos_opt: '{:?}'",
+                current_pos,
+                prev_pos_opt,
+                next_pos_opt
+            );
+            match (prev_pos_opt, next_pos_opt) {
+                (None, None) => (None, None),
+                (Some(prev_pos), None) => (Some(prev_pos), Some(current_pos)),
+                (None, Some(next_pos)) => (Some(current_pos), Some(next_pos)),
+                (Some(prev_pos), Some(next_pos)) => {
+                    let prev_distance = current_pos.saturating_sub(prev_pos);
+                    let next_distance = next_pos.saturating_sub(current_pos);
+
+                    log::warn!(
+                        "prev_distance: '{}', next_distance: '{}'",
+                        prev_distance,
+                        next_distance
+                    );
+                    if next_distance < prev_distance {
+                        (Some(current_pos), Some(next_pos))
+                    } else {
+                        (Some(prev_pos), Some(current_pos))
+                    }
+                }
+            }
+        } else {
+            (
+                search::find_nth_prev(text, open_char, current_pos, n),
+                search::find_nth_next(text, close_char, current_pos, n),
+            )
         }
-        (
-            search::find_nth_prev(text, open, pos, n),
-            search::find_nth_next(text, close, pos, n),
-        )
     } else {
         (
-            find_nth_open_pair(text, open, close, pos, n),
-            find_nth_close_pair(text, open, close, pos, n),
+            find_nth_open_pair(text, open_char, close_char, current_pos, n),
+            find_nth_close_pair(text, open_char, close_char, current_pos, n),
         )
     };
 
-    Option::zip(open, close).ok_or(Error::PairNotFound)
+    Option::zip(open_pos, close_pos).ok_or(Error::PairNotFound)
 }
 
 fn find_nth_open_pair(
@@ -175,6 +201,15 @@ fn find_nth_open_pair(
     mut pos: usize,
     n: usize,
 ) -> Option<usize> {
+    log::info!(
+        "Entered find_nth_open_pair, text: '{}', open: '{}', close: '{}', pos: '{}', n: '{}'",
+        text,
+        open,
+        close,
+        pos,
+        n
+    );
+
     if pos >= text.len_chars() {
         return None;
     }
@@ -269,6 +304,12 @@ pub fn get_surround_pos(
             Some(ch) => find_nth_pairs_pos(text, ch, range, skip)?,
             None => find_nth_closest_pairs_pos(text, range, skip)?,
         };
+
+        log::warn!(
+            "[get_surround_pos] open_pos: '{}', close_pos: '{}'",
+            open_pos,
+            close_pos
+        );
         if change_pos.contains(&open_pos) || change_pos.contains(&close_pos) {
             return Err(Error::CursorOverlap);
         }
