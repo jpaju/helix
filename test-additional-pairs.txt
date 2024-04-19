@@ -1,0 +1,1 @@
+"foo" arr "string" (list) "foo" 'string' ´string´ `string` |pipe|
